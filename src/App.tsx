@@ -22,19 +22,6 @@ const ZapIcon = ({ className = "w-5 h-5" }) => (
   </svg>
 );
 
-const WrenchIcon = ({ className = "w-5 h-5" }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
-  </svg>
-);
-
-const TruckIcon = ({ className = "w-5 h-5" }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
-  </svg>
-);
-
 const AlertTriangleIcon = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -120,125 +107,6 @@ const FileSpreadsheetIcon = ({ className = "w-5 h-5" }) => (
 );
 
 const TODAY = '2026-07-28';
-const YESTERDAY = '2026-07-27';
-
-const INITIAL_CONTRACTS = [
-  {
-    id: 'emp-1',
-    nome: 'EletroServ Engenharia',
-    regional: 'Regional Norte',
-    previstoLV: 10,
-    previstoLML: 15,
-    previstoLMP: 5
-  },
-  {
-    id: 'emp-2',
-    nome: 'RedeForte Construtora',
-    regional: 'Regional Sul',
-    previstoLV: 8,
-    previstoLML: 12,
-    previstoLMP: 4
-  },
-  {
-    id: 'emp-3',
-    nome: 'Alta Tensão Serviços',
-    regional: 'Regional Leste',
-    previstoLV: 12,
-    previstoLML: 20,
-    previstoLMP: 8
-  },
-  {
-    id: 'emp-4',
-    nome: 'PowerGrid Sistemas',
-    regional: 'Regional Oeste',
-    previstoLV: 6,
-    previstoLML: 10,
-    previstoLMP: 4
-  },
-  {
-    id: 'emp-5',
-    nome: 'Luz & Energia Infra',
-    regional: 'Regional Norte',
-    previstoLV: 14,
-    previstoLML: 18,
-    previstoLMP: 10
-  }
-];
-
-const INITIAL_DAILY_LOGS = [
-  {
-    id: 'log-1',
-    empreiteiraId: 'emp-1',
-    data: TODAY,
-    mobilizadoLV: 7,
-    mobilizadoLML: 15,
-    mobilizadoLMP: 6,
-    justificativa: 'Falta de eletricistas qualificados de Linha Viva para cobrir aposentadorias.'
-  },
-  {
-    id: 'log-2',
-    empreiteiraId: 'emp-2',
-    data: TODAY,
-    mobilizadoLV: 8,
-    mobilizadoLML: 10,
-    mobilizadoLMP: 4,
-    justificativa: 'Veículo operacional de manutenção leve em oficina mecânica para preventiva.'
-  },
-  {
-    id: 'log-3',
-    empreiteiraId: 'emp-3',
-    data: TODAY,
-    mobilizadoLV: 15,
-    mobilizadoLML: 22,
-    mobilizadoLMP: 8,
-    justificativa: 'Reforço enviado emergencialmente para atender contingência de tempestades.'
-  },
-  {
-    id: 'log-6',
-    empreiteiraId: 'emp-1',
-    data: YESTERDAY,
-    mobilizadoLV: 8,
-    mobilizadoLML: 15,
-    mobilizadoLMP: 5,
-    justificativa: 'Eletricista de LV em licença médica.'
-  },
-  {
-    id: 'log-7',
-    empreiteiraId: 'emp-2',
-    data: YESTERDAY,
-    mobilizadoLV: 8,
-    mobilizadoLML: 12,
-    mobilizadoLMP: 4,
-    justificativa: 'Mobilização regular efetuada sem atrasos.'
-  },
-  {
-    id: 'log-8',
-    empreiteiraId: 'emp-3',
-    data: YESTERDAY,
-    mobilizadoLV: 14,
-    mobilizadoLML: 20,
-    mobilizadoLMP: 8,
-    justificativa: 'Início de sobreaviso para contingência de tempestade.'
-  },
-  {
-    id: 'log-9',
-    empreiteiraId: 'emp-4',
-    data: YESTERDAY,
-    mobilizadoLV: 6,
-    mobilizadoLML: 10,
-    mobilizadoLMP: 4,
-    justificativa: 'Mobilização 100% conforme plano inicial contratual.'
-  },
-  {
-    id: 'log-10',
-    empreiteiraId: 'emp-5',
-    data: YESTERDAY,
-    mobilizadoLV: 10,
-    mobilizadoLML: 14,
-    mobilizadoLMP: 7,
-    justificativa: 'Pendente liberação de ASO e exames periódicos de 11 integrantes.'
-  }
-];
 
 // Converte uma linha da tabela "empreiteiras" (snake_case) para o formato usado no dashboard (camelCase)
 const mapContractFromDB = (row) => ({
@@ -842,13 +710,13 @@ export default function App() {
           <div>
             <div className="flex items-center gap-2 text-amber-600 font-semibold text-xs tracking-wider uppercase mb-1">
               <ZapIcon className="w-4 h-4" />
-              Gestão Operacional de Redes Elétricas
+              DCMD
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Mobilização de Equipes de Empreiteiras
+              Mobilização de Equipes
             </h1>
             <p className="text-slate-500 text-xs mt-1">
-              Acompanhamento diário contratual por categoria técnica (LV, LML, LMP)
+              Acompanhamento diário por categoria técnica (LV, LML, LMP)
             </p>
           </div>
 
@@ -1023,19 +891,13 @@ export default function App() {
                   <th className="py-3.5 px-4">Empreiteira / Regional</th>
                   <th className="py-3.5 px-3 text-center">Status Lançamento</th>
                   <th className="py-3.5 px-3 text-center bg-amber-50/50 text-amber-800 border-l border-amber-100">
-                    <span className="flex items-center justify-center gap-1">
-                      <ZapIcon className="w-3.5 h-3.5" /> Linha Viva (LV)
-                    </span>
+                    Linha Viva (LV)
                   </th>
                   <th className="py-3.5 px-3 text-center bg-sky-50/50 text-sky-800 border-l border-sky-100">
-                    <span className="flex items-center justify-center gap-1">
-                      <WrenchIcon className="w-3.5 h-3.5" /> L. Morta Leve (LML)
-                    </span>
+                    Linha Morta Leve (LML)
                   </th>
                   <th className="py-3.5 px-3 text-center bg-purple-50/50 text-purple-800 border-l border-purple-100">
-                    <span className="flex items-center justify-center gap-1">
-                      <TruckIcon className="w-3.5 h-3.5" /> L. Morta Pesada (LMP)
-                    </span>
+                    Linha Morta Pesada (LMP)
                   </th>
                   <th className="py-3.5 px-3 text-center border-l border-slate-200">Total Previsto</th>
                   <th className="py-3.5 px-3 text-center">Total Mobilizado</th>
@@ -1355,7 +1217,7 @@ export default function App() {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Regional Norte"
+                  placeholder="Ex: Metropolitana"
                   value={contractForm.regional}
                   onChange={(e) => setContractForm(prev => ({ ...prev, regional: e.target.value }))}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -1363,7 +1225,7 @@ export default function App() {
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
-                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">Quantitativo Previsto em Contrato</p>
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">Quantitativo Equipes Previsto em Contrato</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-medium text-amber-800 mb-1">Linha Viva (LV)</label>
@@ -1600,7 +1462,7 @@ export default function App() {
       {/* Footer */}
       {}
       <footer className="mt-8 text-center text-xs text-slate-400">
-        Dashboard de Gestão de Mobilização de Equipes de Empreiteiras &copy; 2026
+        Dashboard de Gestão de Mobilização de Equipes Energisa DCMD &copy; 2026 | Desenvolvido por Lorena Curvo
       </footer>
     </div>
   );
