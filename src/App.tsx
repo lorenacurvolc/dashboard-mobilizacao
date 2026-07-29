@@ -106,7 +106,16 @@ const FileSpreadsheetIcon = ({ className = "w-5 h-5" }) => (
   </svg>
 );
 
-const TODAY = '2026-07-28';
+// Retorna a data de hoje no formato 'YYYY-MM-DD', respeitando o fuso horário local do navegador
+const getTodayLocal = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const TODAY = getTodayLocal();
 
 // Converte uma linha da tabela "empreiteiras" (snake_case) para o formato usado no dashboard (camelCase)
 const mapContractFromDB = (row) => ({
@@ -225,6 +234,12 @@ export default function App() {
   const [historyDateStart, setHistoryDateStart] = useState('');
   const [historyDateEnd, setHistoryDateEnd] = useState('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState('Todos');
+
+  const [deleteConfirmContract, setDeleteConfirmContract] = useState(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState('');
+  const [deletePasswordError, setDeletePasswordError] = useState('');
+
+  const ADMIN_DELETE_PASSWORD = '0410';
 
   const [contractForm, setContractForm] = useState({
     nome: '',
@@ -649,6 +664,21 @@ export default function App() {
     // dessa empreiteira já são removidos automaticamente no banco.
     await fetchContracts();
     await fetchDailyLogs();
+  };
+
+  const handleConfirmDeleteContract = async (e) => {
+    e.preventDefault();
+    if (!deleteConfirmContract) return;
+
+    if (deletePasswordInput !== ADMIN_DELETE_PASSWORD) {
+      setDeletePasswordError('Senha incorreta. Tente novamente.');
+      return;
+    }
+
+    await handleDeleteContract(deleteConfirmContract.id);
+    setDeleteConfirmContract(null);
+    setDeletePasswordInput('');
+    setDeletePasswordError('');
   };
 
   const handleOpenDailyModal = (item) => {
@@ -1281,7 +1311,11 @@ export default function App() {
                           </button>
 
                           <button
-                            onClick={() => handleDeleteContract(item.id)}
+                            onClick={() => {
+                              setDeleteConfirmContract(item);
+                              setDeletePasswordInput('');
+                              setDeletePasswordError('');
+                            }}
                             className="p-1.5 hover:bg-rose-100 text-rose-600 rounded-lg transition"
                             title="Excluir Empreiteira"
                           >
@@ -1736,6 +1770,77 @@ export default function App() {
                   className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
                 >
                   Registrar Mobilização
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmação de Exclusão com Senha de Administrador */}
+      {}
+      {deleteConfirmContract && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <AlertTriangleIcon className="w-5 h-5 text-rose-500" />
+                Confirmar Exclusão
+              </h3>
+              <button
+                onClick={() => {
+                  setDeleteConfirmContract(null);
+                  setDeletePasswordInput('');
+                  setDeletePasswordError('');
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmDeleteContract} className="mt-4 space-y-4">
+              <p className="text-xs text-slate-600">
+                Você está prestes a excluir <span className="font-bold text-slate-900">{deleteConfirmContract.nome}</span> e
+                todo o histórico de lançamentos associado a ela. Essa ação não pode ser desfeita.
+                Digite a senha de administrador para confirmar.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Senha de Administrador</label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={deletePasswordInput}
+                  onChange={(e) => {
+                    setDeletePasswordInput(e.target.value);
+                    if (deletePasswordError) setDeletePasswordError('');
+                  }}
+                  placeholder="Digite a senha"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                {deletePasswordError && (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1">{deletePasswordError}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteConfirmContract(null);
+                    setDeletePasswordInput('');
+                    setDeletePasswordError('');
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  Excluir Empreiteira
                 </button>
               </div>
             </form>
