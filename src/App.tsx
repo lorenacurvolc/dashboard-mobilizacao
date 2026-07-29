@@ -222,6 +222,9 @@ export default function App() {
   const [selectedContractForLog, setSelectedContractForLog] = useState(null);
 
   const [historyContractId, setHistoryContractId] = useState(null);
+  const [historyDateStart, setHistoryDateStart] = useState('');
+  const [historyDateEnd, setHistoryDateEnd] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('Todos');
 
   const [contractForm, setContractForm] = useState({
     nome: '',
@@ -525,6 +528,49 @@ export default function App() {
     document.body.removeChild(link);
   };
 
+  const handleExportWeeklyDeficitCSV = () => {
+    const headers = [
+      'Empreiteira',
+      'Regional',
+      'Deficit Total',
+      'Deficit LV',
+      'Deficit LML',
+      'Deficit LMP',
+      'Previsao Data',
+      'Previsao LV',
+      'Previsao LML',
+      'Previsao LMP',
+      'Comentario',
+      'Datas Analisadas'
+    ];
+
+    const rows = weeklyDeficitLogs.map(item => [
+      `"${item.nome}"`,
+      `"${item.regional}"`,
+      item.saldoTotal,
+      item.deltaLV,
+      item.deltaLML,
+      item.deltaLMP,
+      `"${item.semPrevisaoData ? 'Sem previsao ate o momento' : (item.previsaoData || '')}"`,
+      item.previsaoLV,
+      item.previsaoLML,
+      item.previsaoLMP,
+      `"${item.justificativa.replace(/"/g, '""')}"`,
+      `"${item.datas.join(' | ')}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF'
+      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `deficit_semanal_ate_${selectedDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleOpenContractModal = (contract = null) => {
     if (contract) {
       setEditingContract(contract);
@@ -607,21 +653,35 @@ export default function App() {
 
   const handleOpenDailyModal = (item) => {
     setSelectedContractForLog(item);
+
+    // Lançamento já existente exatamente na data selecionada (edição)
     const existingLog = item.hasLog
       ? dailyLogs.find(l => l.empreiteiraId === item.id && l.data === selectedDate)
       : null;
 
+    // Lançamento mais recente da empreiteira antes da data selecionada
+    // (usado para pré-preencher quando ainda não existe lançamento na data escolhida)
+    const previousLogs = dailyLogs
+      .filter(l => l.empreiteiraId === item.id && l.data < selectedDate)
+      .sort((a, b) => new Date(b.data) - new Date(a.data));
+    const lastLog = previousLogs[0] || null;
+
+    // Fonte de preenchimento: o próprio lançamento da data (se existir),
+    // senão o último lançamento anterior (se existir),
+    // senão vazio/previsto em contrato (primeiro lançamento da empreiteira)
+    const sourceLog = existingLog || lastLog;
+
     setDailyForm({
       data: selectedDate,
-      mobilizadoLV: item.hasLog ? item.mobilizadoLV : item.previstoLV,
-      mobilizadoLML: item.hasLog ? item.mobilizadoLML : item.previstoLML,
-      mobilizadoLMP: item.hasLog ? item.mobilizadoLMP : item.previstoLMP,
-      justificativa: item.justificativa || '',
-      previsaoData: existingLog?.previsaoData || '',
-      semPrevisaoData: existingLog?.semPrevisaoData || false,
-      previsaoLV: existingLog?.previsaoLV || 0,
-      previsaoLML: existingLog?.previsaoLML || 0,
-      previsaoLMP: existingLog?.previsaoLMP || 0
+      mobilizadoLV: sourceLog ? sourceLog.mobilizadoLV : item.previstoLV,
+      mobilizadoLML: sourceLog ? sourceLog.mobilizadoLML : item.previstoLML,
+      mobilizadoLMP: sourceLog ? sourceLog.mobilizadoLMP : item.previstoLMP,
+      justificativa: sourceLog?.justificativa || '',
+      previsaoData: sourceLog?.previsaoData || '',
+      semPrevisaoData: sourceLog?.semPrevisaoData || false,
+      previsaoLV: sourceLog?.previsaoLV || 0,
+      previsaoLML: sourceLog?.previsaoLML || 0,
+      previsaoLMP: sourceLog?.previsaoLMP || 0
     });
     setIsDailyModalOpen(true);
   };
@@ -695,6 +755,26 @@ export default function App() {
       .sort((a, b) => new Date(b.data) - new Date(a.data));
   }, [historyContractId, dailyLogs]);
 
+  const filteredHistoryLogs = useMemo(() => {
+    if (!activeHistoryContract) return [];
+    const prevTot = activeHistoryContract.previstoLV + activeHistoryContract.previstoLML + activeHistoryContract.previstoLMP;
+
+    return historyLogsForContract.filter(log => {
+      if (historyDateStart && log.data < historyDateStart) return false;
+      if (historyDateEnd && log.data > historyDateEnd) return false;
+
+      if (historyStatusFilter !== 'Todos') {
+        const mobTot = (log.mobilizadoLV || 0) + (log.mobilizadoLML || 0) + (log.mobilizadoLMP || 0);
+        const diff = mobTot - prevTot;
+        if (historyStatusFilter === 'Deficit' && diff >= 0) return false;
+        if (historyStatusFilter === 'Extra' && diff <= 0) return false;
+        if (historyStatusFilter === 'Conforme' && diff !== 0) return false;
+      }
+
+      return true;
+    });
+  }, [historyLogsForContract, activeHistoryContract, historyDateStart, historyDateEnd, historyStatusFilter]);
+
   const trendData7Days = useMemo(() => {
     const dates = getPastDatesRange(selectedDate, 7);
     return dates.map(dateStr => {
@@ -766,7 +846,43 @@ export default function App() {
       });
     });
 
-    return list.sort((a, b) => new Date(b.dataRegistro) - new Date(a.dataRegistro));
+    // Agrupa lançamentos idênticos (mesma empreiteira, mesmo déficit por categoria,
+    // mesma previsão e mesmo comentário) em uma única linha, guardando todas as datas
+    const groupsMap = new Map();
+
+    list.forEach(item => {
+      const signature = [
+        item.nome,
+        item.deltaLV,
+        item.deltaLML,
+        item.deltaLMP,
+        item.semPrevisaoData ? 'sem-previsao' : (item.previsaoData || ''),
+        item.previsaoLV,
+        item.previsaoLML,
+        item.previsaoLMP,
+        item.justificativa.trim()
+      ].join('|');
+
+      const key = `${item.nome}__${signature}`;
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, { ...item, datas: [item.dataRegistro] });
+      } else {
+        const existing = groupsMap.get(key);
+        existing.datas.push(item.dataRegistro);
+        // mantém sempre a data mais recente como referência principal da linha
+        if (new Date(item.dataRegistro) > new Date(existing.dataRegistro)) {
+          existing.dataRegistro = item.dataRegistro;
+        }
+      }
+    });
+
+    const groupedList = Array.from(groupsMap.values()).map(g => ({
+      ...g,
+      datas: g.datas.sort((a, b) => new Date(a) - new Date(b))
+    }));
+
+    return groupedList.sort((a, b) => new Date(b.dataRegistro) - new Date(a.dataRegistro));
   }, [contracts, dailyLogs, selectedDate, selectedRegional]);
 
   const pieChartData = useMemo(() => {
@@ -1144,7 +1260,12 @@ export default function App() {
                           </button>
 
                           <button
-                            onClick={() => setHistoryContractId(item.id)}
+                            onClick={() => {
+                              setHistoryContractId(item.id);
+                              setHistoryDateStart('');
+                              setHistoryDateEnd('');
+                              setHistoryStatusFilter('Todos');
+                            }}
                             className="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition"
                             title="Ver Histórico Diário"
                           >
@@ -1195,9 +1316,20 @@ export default function App() {
             
             {/* Tabela: Empreiteiras em Déficit da Semana */}
             <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-4">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4">
-                Empreiteiras em Déficit da Semana
-              </h4>
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Empreiteiras em Déficit da Semana
+                </h4>
+                <button
+                  onClick={handleExportWeeklyDeficitCSV}
+                  disabled={weeklyDeficitLogs.length === 0}
+                  className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition"
+                  title="Exportar tabela de déficit da semana em CSV"
+                >
+                  <DownloadIcon className="w-3.5 h-3.5" />
+                  Exportar CSV
+                </button>
+              </div>
               <div className="h-64 overflow-y-auto text-xs">
                 {weeklyDeficitLogs.length === 0 ? (
                   <div className="h-full flex items-center justify-center">
@@ -1211,7 +1343,8 @@ export default function App() {
                         <th className="py-2 px-2">Regional</th>
                         <th className="py-2 px-2 text-center">Déficit</th>
                         <th className="py-2 px-2">Previsão de Mobilização</th>
-                        <th className="py-2 pl-2">Comentário</th>
+                        <th className="py-2 px-2">Comentário</th>
+                        <th className="py-2 pl-2">Datas Analisadas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200/70">
@@ -1240,8 +1373,11 @@ export default function App() {
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="py-2 pl-2 text-slate-600">
+                          <td className="py-2 px-2 text-slate-600">
                             {item.justificativa || <span className="text-slate-400">-</span>}
+                          </td>
+                          <td className="py-2 pl-2 text-slate-500">
+                            {item.datas.map(d => toShortDate(d)).join(', ')}
                           </td>
                         </tr>
                       ))}
@@ -1625,13 +1761,71 @@ export default function App() {
               </button>
             </div>
 
+            {/* Filtros do Histórico */}
+            <div className="flex flex-wrap items-center gap-2 pt-3 flex-shrink-0 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-500">De:</label>
+                <input
+                  type="date"
+                  value={historyDateStart}
+                  onChange={(e) => setHistoryDateStart(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-500">Até:</label>
+                <input
+                  type="date"
+                  value={historyDateEnd}
+                  onChange={(e) => setHistoryDateEnd(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl gap-1">
+                {[
+                  { id: 'Todos', label: 'Todos' },
+                  { id: 'Deficit', label: 'Déficit' },
+                  { id: 'Extra', label: 'Extra' },
+                  { id: 'Conforme', label: 'Conforme' }
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setHistoryStatusFilter(f.id)}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition ${
+                      historyStatusFilter === f.id
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {(historyDateStart || historyDateEnd || historyStatusFilter !== 'Todos') && (
+                <button
+                  onClick={() => {
+                    setHistoryDateStart('');
+                    setHistoryDateEnd('');
+                    setHistoryStatusFilter('Todos');
+                  }}
+                  className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+
             <div className="overflow-y-auto my-4 space-y-3 flex-grow pr-1">
-              {historyLogsForContract.length === 0 ? (
+              {filteredHistoryLogs.length === 0 ? (
                 <p className="text-center py-8 text-slate-400 text-xs">
-                  Nenhum lançamento registrado no histórico para esta empreiteira.
+                  {historyLogsForContract.length === 0
+                    ? 'Nenhum lançamento registrado no histórico para esta empreiteira.'
+                    : 'Nenhum lançamento encontrado com os filtros selecionados.'}
                 </p>
               ) : (
-                historyLogsForContract.map((log) => {
+                filteredHistoryLogs.map((log) => {
                   const prevTot = activeHistoryContract.previstoLV + activeHistoryContract.previstoLML + activeHistoryContract.previstoLMP;
                   const mobTot = log.mobilizadoLV + log.mobilizadoLML + log.mobilizadoLMP;
                   const diff = mobTot - prevTot;
@@ -1665,6 +1859,26 @@ export default function App() {
                           <span className="font-bold text-slate-700">{log.mobilizadoLMP}</span> / <span className="text-slate-400">{activeHistoryContract.previstoLMP}</span>
                         </div>
                       </div>
+
+                      {diff < 0 && (log.semPrevisaoData || log.previsaoData) && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 text-xs">
+                          <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wider mb-0.5">
+                            Previsão de Mobilização
+                          </p>
+                          {log.semPrevisaoData ? (
+                            <span className="font-semibold text-amber-700">Sem previsão até o momento</span>
+                          ) : (
+                            <span className="text-slate-700">
+                              <span className="font-semibold">{toShortDate(log.previsaoData)}</span>
+                              {(log.previsaoLV > 0 || log.previsaoLML > 0 || log.previsaoLMP > 0) && (
+                                <span className="ml-1 text-sky-700 font-semibold">
+                                  ({formatPrevisaoBreakdown(log)})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {log.justificativa && (
                         <p className="text-xs text-slate-600 bg-white p-2 rounded-lg border border-slate-200 italic">
