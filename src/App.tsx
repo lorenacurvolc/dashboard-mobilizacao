@@ -126,8 +126,29 @@ const mapLogFromDB = (row) => ({
   mobilizadoLV: row.mobilizado_lv,
   mobilizadoLML: row.mobilizado_lml,
   mobilizadoLMP: row.mobilizado_lmp,
-  justificativa: row.justificativa || ''
+  justificativa: row.justificativa || '',
+  previsaoData: row.previsao_data || '',
+  semPrevisaoData: !!row.sem_previsao_data,
+  previsaoLV: row.previsao_lv || 0,
+  previsaoLML: row.previsao_lml || 0,
+  previsaoLMP: row.previsao_lmp || 0
 });
+
+// Formata 'YYYY-MM-DD' como 'DD/MM'
+const toShortDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : dateStr;
+};
+
+// Monta o resumo por categoria da previsão de reforço, ex: "+2 LV +1 LML"
+const formatPrevisaoBreakdown = (item) => {
+  const parts = [];
+  if (item.previsaoLV > 0) parts.push(`+${item.previsaoLV} LV`);
+  if (item.previsaoLML > 0) parts.push(`+${item.previsaoLML} LML`);
+  if (item.previsaoLMP > 0) parts.push(`+${item.previsaoLMP} LMP`);
+  return parts.join(' ');
+};
 
 export default function App() {
   const [contracts, setContracts] = useState([]);
@@ -215,8 +236,20 @@ export default function App() {
     mobilizadoLV: 0,
     mobilizadoLML: 0,
     mobilizadoLMP: 0,
-    justificativa: ''
+    justificativa: '',
+    previsaoData: '',
+    semPrevisaoData: false,
+    previsaoLV: 0,
+    previsaoLML: 0,
+    previsaoLMP: 0
   });
+
+  // Cálculos auxiliares para saber, em tempo real dentro do modal, se o lançamento
+  // que está sendo digitado configura déficit (usados para exibir os campos de previsão)
+  const modalMobTotal = (Number(dailyForm.mobilizadoLV) || 0) + (Number(dailyForm.mobilizadoLML) || 0) + (Number(dailyForm.mobilizadoLMP) || 0);
+  const modalPrevTotal = selectedContractForLog ? selectedContractForLog.totalPrevisto : 0;
+  const isModalDeficit = !!selectedContractForLog && modalMobTotal < modalPrevTotal;
+  const deficitAmount = modalPrevTotal - modalMobTotal;
 
   const regionais = useMemo(() => {
     const list = Array.from(new Set(contracts.map(c => c.regional)));
@@ -574,12 +607,21 @@ export default function App() {
 
   const handleOpenDailyModal = (item) => {
     setSelectedContractForLog(item);
+    const existingLog = item.hasLog
+      ? dailyLogs.find(l => l.empreiteiraId === item.id && l.data === selectedDate)
+      : null;
+
     setDailyForm({
       data: selectedDate,
       mobilizadoLV: item.hasLog ? item.mobilizadoLV : item.previstoLV,
       mobilizadoLML: item.hasLog ? item.mobilizadoLML : item.previstoLML,
       mobilizadoLMP: item.hasLog ? item.mobilizadoLMP : item.previstoLMP,
-      justificativa: item.justificativa || ''
+      justificativa: item.justificativa || '',
+      previsaoData: existingLog?.previsaoData || '',
+      semPrevisaoData: existingLog?.semPrevisaoData || false,
+      previsaoLV: existingLog?.previsaoLV || 0,
+      previsaoLML: existingLog?.previsaoLML || 0,
+      previsaoLMP: existingLog?.previsaoLMP || 0
     });
     setIsDailyModalOpen(true);
   };
@@ -588,13 +630,41 @@ export default function App() {
     e.preventDefault();
     if (!selectedContractForLog) return;
 
+    const mobLV = Number(dailyForm.mobilizadoLV) || 0;
+    const mobLML = Number(dailyForm.mobilizadoLML) || 0;
+    const mobLMP = Number(dailyForm.mobilizadoLMP) || 0;
+    const totalMob = mobLV + mobLML + mobLMP;
+    const totalPrev = selectedContractForLog.totalPrevisto;
+
+    // 1. Identifica se existe déficit
+    const isDeficit = totalMob < totalPrev;
+
+    // 2. Trava o envio caso a data (ou a flag "sem previsão") ou a justificativa
+    // estejam vazias em cenário de déficit
+    if (isDeficit) {
+      if (!dailyForm.semPrevisaoData && !dailyForm.previsaoData) {
+        alert('Como houve déficit, informe a data de previsão de mobilização ou marque "Sem previsão até o momento".');
+        return;
+      }
+      if (!dailyForm.justificativa.trim()) {
+        alert('Como houve déficit, o comentário/justificativa é obrigatório.');
+        return;
+      }
+    }
+
+    // 3. Monta o payload (colunas em snake_case) formatando os dados de acordo com o estado do déficit
     const payload = {
       empreiteira_id: selectedContractForLog.id,
       data: dailyForm.data,
-      mobilizado_lv: Number(dailyForm.mobilizadoLV) || 0,
-      mobilizado_lml: Number(dailyForm.mobilizadoLML) || 0,
-      mobilizado_lmp: Number(dailyForm.mobilizadoLMP) || 0,
-      justificativa: dailyForm.justificativa.trim()
+      mobilizado_lv: mobLV,
+      mobilizado_lml: mobLML,
+      mobilizado_lmp: mobLMP,
+      justificativa: dailyForm.justificativa.trim(),
+      sem_previsao_data: isDeficit ? dailyForm.semPrevisaoData : false,
+      previsao_data: (isDeficit && !dailyForm.semPrevisaoData && dailyForm.previsaoData) ? dailyForm.previsaoData : null,
+      previsao_lv: isDeficit ? (Number(dailyForm.previsaoLV) || 0) : 0,
+      previsao_lml: isDeficit ? (Number(dailyForm.previsaoLML) || 0) : 0,
+      previsao_lmp: isDeficit ? (Number(dailyForm.previsaoLMP) || 0) : 0
     };
 
     // upsert: se já existir lançamento para essa empreiteira nessa data, atualiza;
@@ -648,6 +718,55 @@ export default function App() {
         Mobilizado: mobSum
       };
     });
+  }, [contracts, dailyLogs, selectedDate, selectedRegional]);
+
+  const weeklyDeficitLogs = useMemo(() => {
+    const dates = getPastDatesRange(selectedDate, 7);
+    const list = [];
+
+    dates.forEach(dateStr => {
+      contracts.forEach(contract => {
+        if (selectedRegional !== 'Todas' && contract.regional !== selectedRegional) return;
+
+        const log = dailyLogs.find(l => l.empreiteiraId === contract.id && l.data === dateStr);
+        if (!log) return;
+
+        const prevLV = contract.previstoLV || 0;
+        const prevLML = contract.previstoLML || 0;
+        const prevLMP = contract.previstoLMP || 0;
+        const totalPrevisto = prevLV + prevLML + prevLMP;
+
+        const mobLV = log.mobilizadoLV || 0;
+        const mobLML = log.mobilizadoLML || 0;
+        const mobLMP = log.mobilizadoLMP || 0;
+        const totalMob = mobLV + mobLML + mobLMP;
+
+        const saldo = totalMob - totalPrevisto;
+
+        // Filtra e estrutura apenas os registros onde houve déficit (saldo < 0)
+        if (saldo < 0) {
+          list.push({
+            id: `${log.id}-${dateStr}`,
+            dataRegistro: dateStr,
+            nome: contract.nome,
+            regional: contract.regional,
+            saldoTotal: saldo,
+            deltaLV: mobLV - prevLV,
+            deltaLML: mobLML - prevLML,
+            deltaLMP: mobLMP - prevLMP,
+            previsaoData: log.previsaoData,
+            semPrevisaoData: log.semPrevisaoData,
+            previsaoLV: log.previsaoLV || 0,
+            previsaoLML: log.previsaoLML || 0,
+            previsaoLMP: log.previsaoLMP || 0,
+            previsaoTotal: (log.previsaoLV || 0) + (log.previsaoLML || 0) + (log.previsaoLMP || 0),
+            justificativa: log.justificativa || ''
+          });
+        }
+      });
+    });
+
+    return list.sort((a, b) => new Date(b.dataRegistro) - new Date(a.dataRegistro));
   }, [contracts, dailyLogs, selectedDate, selectedRegional]);
 
   const pieChartData = useMemo(() => {
@@ -1074,25 +1193,61 @@ export default function App() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Chart 1: Previsto vs Mobilizado por Empreiteira */}
+            {/* Tabela: Empreiteiras em Déficit da Semana */}
             <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-4">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4">
-                Previsto vs Mobilizado por Empreiteira ({selectedDate})
+                Empreiteiras em Déficit da Semana
               </h4>
-              <div className="h-64 text-xs">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={filteredDailyData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="nome" tick={{ fill: '#64748B', fontSize: 11 }} tickLine={false} />
-                    <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1E293B', borderRadius: '8px', color: '#FFF', border: 'none' }}
-                    />
-                    <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                    <Bar dataKey="totalPrevisto" name="Previsto Contratual" fill="#CBD5E1" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="totalMobilizado" name="Mobilizado Efetivo" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="h-64 overflow-y-auto text-xs">
+                {weeklyDeficitLogs.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-slate-400 font-medium">Nenhum déficit registrado nos últimos 7 dias.</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-200">
+                        <th className="py-2 pr-2">Empreiteira</th>
+                        <th className="py-2 px-2">Regional</th>
+                        <th className="py-2 px-2 text-center">Déficit</th>
+                        <th className="py-2 px-2">Previsão de Mobilização</th>
+                        <th className="py-2 pl-2">Comentário</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/70">
+                      {weeklyDeficitLogs.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-2 pr-2 font-bold text-slate-800">{item.nome}</td>
+                          <td className="py-2 px-2 text-slate-600">{item.regional}</td>
+                          <td className="py-2 px-2 text-center">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                              {item.saldoTotal}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-slate-600">
+                            {item.semPrevisaoData ? (
+                              <span className="font-semibold text-amber-600">Sem previsão até o momento</span>
+                            ) : item.previsaoData ? (
+                              <div>
+                                <span className="font-semibold text-slate-800">{toShortDate(item.previsaoData)}</span>
+                                {item.previsaoTotal > 0 && (
+                                  <div className="text-[10px] text-sky-700 font-semibold">
+                                    {formatPrevisaoBreakdown(item)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-2 pl-2 text-slate-600">
+                            {item.justificativa || <span className="text-slate-400">-</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
 
@@ -1346,10 +1501,85 @@ export default function App() {
                 </div>
               </div>
 
+              {isModalDeficit && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-3">
+                  <p className="text-xs font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangleIcon className="w-3.5 h-3.5" />
+                    Déficit de {deficitAmount} equipe(s) — previsão de mobilização obrigatória
+                  </p>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-rose-800">
+                    <input
+                      type="checkbox"
+                      checked={dailyForm.semPrevisaoData}
+                      onChange={(e) => setDailyForm(prev => ({
+                        ...prev,
+                        semPrevisaoData: e.target.checked,
+                        previsaoData: e.target.checked ? '' : prev.previsaoData
+                      }))}
+                      className="w-3.5 h-3.5"
+                    />
+                    Sem previsão de mobilização até o momento
+                  </label>
+
+                  {!dailyForm.semPrevisaoData && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-rose-800 mb-1">Data de Previsão de Mobilização</label>
+                      <input
+                        type="date"
+                        required={isModalDeficit && !dailyForm.semPrevisaoData}
+                        value={dailyForm.previsaoData}
+                        onChange={(e) => setDailyForm(prev => ({ ...prev, previsaoData: e.target.value }))}
+                        className="w-full bg-white border border-rose-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-[11px] font-medium text-rose-800 mb-1">Equipes Previstas para Mobilizar nessa Data</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-medium text-amber-800 mb-1">LV</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={dailyForm.previsaoLV}
+                          onChange={(e) => setDailyForm(prev => ({ ...prev, previsaoLV: e.target.value }))}
+                          className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-sky-800 mb-1">LML</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={dailyForm.previsaoLML}
+                          onChange={(e) => setDailyForm(prev => ({ ...prev, previsaoLML: e.target.value }))}
+                          className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-purple-800 mb-1">LMP</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={dailyForm.previsaoLMP}
+                          onChange={(e) => setDailyForm(prev => ({ ...prev, previsaoLMP: e.target.value }))}
+                          className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs text-center font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Justificativa do Desvio / Observações</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Justificativa do Desvio / Observações{isModalDeficit && <span className="text-rose-600"> *</span>}
+                </label>
                 <textarea
                   rows={3}
+                  required={isModalDeficit}
                   placeholder="Descreva o motivo caso haja déficit, manutenção de frota, folga de equipe ou contingência..."
                   value={dailyForm.justificativa}
                   onChange={(e) => setDailyForm(prev => ({ ...prev, justificativa: e.target.value }))}
